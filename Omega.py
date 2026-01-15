@@ -49,14 +49,13 @@ def integrand_RD(s,t,k, P_func,cs_value):
 
     return 4*prefactor * I * P_ku * P_kv
 
-
-
 def compute_Omega_RD(k, cs_value, P_func):
 
     result, error = integrate.dblquad(
-        lambda t, s: integrand_RD(s, t, k, P_func, cs_value),
-        0, 1,                  
-        0, np.inf,  
+        lambda s, t: integrand_RD(s, t, k, P_func, cs_value),
+        0, np.inf,         
+        lambda t: 0,          
+        lambda t: 1,         
     )
     return result, error
         
@@ -74,11 +73,7 @@ def compute_Omega_RD_today(k, cs_value, P_func, Omega_r0_hh,c_g):
 
 
 """ 
-    Functions for computing Omega_GW during early matter domination (eMD) phase.
-"""
-
-+
-
+    Functions for computing Omega_GW during early matter domination (eMD) phase."""
 def P_theta(k, k_cut, A_s):
     if k < k_cut:
         return A_s
