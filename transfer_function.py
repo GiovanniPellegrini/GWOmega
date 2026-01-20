@@ -51,9 +51,16 @@ def make_kernel_RD(cs_value=1/np.sqrt(3)):
 
 
 def analytical_kernel_RD(u_val, v_val, x_val=1, cs_value=1/np.sqrt(3)):
+    """Analytical kernel for radiation domination.
+    Parameters:
+    u_val : integration variable
+    v_val : integration variable
+    x_val : conformal time variable (default is 1)
+    cs_value : sound speed (default is 1/sqrt(3) for relativistic species)
+    """
+
     
     prefactor = 1/2 * np.pow((3 * (u_val**2 + v_val**2 - 3)) / (4 * u_val**3 * v_val**3 * x_val), 2)
-    
     # Second term
     num = 3 - (u_val + v_val)**2
     den = 3 - (u_val - v_val)**2
@@ -68,11 +75,29 @@ def analytical_kernel_RD(u_val, v_val, x_val=1, cs_value=1/np.sqrt(3)):
     result = prefactor * (second_term**2 + third_term)
     return result
 
+def analytical_kernel_RD_vec(u_val, v_val, x_val=1, cs_value=1/np.sqrt(3)):
+    """Vectorized version of the analytical kernel for radiation domination, used for simpson integration."""
+    
+    
+    denom = 4 * u_val**3 * v_val**3 * x_val
+    term1 = (3 * (u_val**2 + v_val**2 - 3)) / denom
+    prefactor = 0.5 * term1**2
+    num = 3 - (u_val + v_val)**2
+    den = 3 - (u_val - v_val)**2
+    log_arg = np.abs(num / den) 
+    term_log = (u_val**2 + v_val**2 - 3) * np.log(log_arg)
+    second_term = -4 * u_val * v_val + term_log 
+    
+    theta = np.where((u_val + v_val) >= 1/cs_value, 1.0, 0.0)
+    third_term = theta * np.pi**2 * (u_val**2 + v_val**2 - 3)**2
+    
+    result = prefactor * (second_term**2 + third_term)
+    return result
+
 
 """
 Kernel functions for early matter domination (eMD) phase.
 """
-
 
 def kernel_eMD_resonant(s,t,k,eta_R, Y=2.3):
     """Kernel for early matter domination at resonance.
@@ -100,7 +125,6 @@ def kernel_eMD_large_v(s,t,k,eta_R):
         k : Wavenumber
         eta_R : Conformal time at reathing
         """
-
     x_R= k * eta_R
     Si_half, Ci_half= sici(x_R / 2)
 
@@ -108,4 +132,3 @@ def kernel_eMD_large_v(s,t,k,eta_R):
     denominator=2**17 * 5**4
 
     return numerator / denominator
-
