@@ -2,9 +2,10 @@ from transfer_function import analytical_kernel_RD, kernel_eMD_resonant, kernel_
 import numpy as np
 from scipy import integrate
 from scipy.special import erfc
+import constants
 
 """
-    This section computes the Omega_GW using the analytical kernel for radiation domination and early matter domination.
+    This section computes the Omega_GW using the analytical kernel for radiation domination and early matter domination which faces sudden reheating.
     We refered to the following papers:
     - https://arxiv.org/abs/2501.11320
     - https://arxiv.org/abs/1804.08577
@@ -65,7 +66,7 @@ def compute_Omega_RD(k, cs_value, P_func):
     return result, error
     
 
-def compute_Omega_RD_fast(k, cs_value, P_func, t_max=50, N_s=100, N_t_1=100, N_t_2=1000, N_t_3=100):
+def compute_Omega_RD_fast(k, cs_value, P_func, t_max=100, N_s=100, N_t_1=100, N_t_2=100, N_t_3=700):
     """
     Here it used the simpson integration instead of dblquad. A grid of s-t values is constructed
 
@@ -107,7 +108,7 @@ def compute_Omega_RD_fast(k, cs_value, P_func, t_max=50, N_s=100, N_t_1=100, N_t
     
     return result, 0.0 
 
-def compute_Omega_RD_today(k, cs_value, P_func, Omega_r0_hh,c_g):
+def compute_Omega_RD_today(k, cs_value, P_func):
     """ Compute Omega_GW today during radiation domination phase
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2
@@ -115,19 +116,19 @@ def compute_Omega_RD_today(k, cs_value, P_func, Omega_r0_hh,c_g):
     """
     Omega_RD, error= compute_Omega_RD(k, cs_value, P_func)
     Omega_GW = (1/24) * Omega_RD
-    Omega_GW_today= Omega_GW*Omega_r0_hh*c_g
+    Omega_GW_today= Omega_GW*constants.Omega_r0_hh*constants.c_g
     return Omega_GW_today, error
 
 
-def compute_Omega_RD_today_fast(k, cs_value, P_func,Omega_r0_hh,c_g, t_max=50, N_s=100, N_t_1=100, N_t_2=1000, N_t_3=100):
+def compute_Omega_RD_today_fast(k, cs_value, P_func, t_max=100, N_s=100, N_t_1=100, N_t_2=100, N_t_3=700):
     """ Compute Omega_GW today during radiation domination phase using fast method
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2
     c_g : Transfer function factor
     """
     Omega_RD, error= compute_Omega_RD_fast(k,cs_value,P_func,t_max,N_s,N_t_1,N_t_2,N_t_3)
-    Omega_GW_today= (1/24)*Omega_RD*Omega_r0_hh*c_g,
-    error_today= (1/24)*error*Omega_r0_hh*c_g
+    Omega_GW_today= (1/24)*Omega_RD*constants.Omega_r0_hh*constants.c_g
+    error_today= 0.0
     return Omega_GW_today, error_today
 
 
@@ -135,15 +136,15 @@ def compute_Omega_RD_today_fast(k, cs_value, P_func,Omega_r0_hh,c_g, t_max=50, N
     Functions for computing Omega_GW during early matter domination (eMD) phase.
 """
 
-def P_theta(k, k_cut, A_s):
-    """Theta power spectrum: P(k) = A_s for k < k_cut, 0 otherwise."""
-    if k < k_cut:
+def P_theta(k, k_max, A_s):
+    """Theta power spectrum: P(k) = A_s for k < k_max, 0 otherwise."""
+    if k < k_max:
         return A_s
     else:
         return 0.0
 
-def P_theta_vec(k, k_cut, A_s):
-    return np.where(k < k_cut, A_s, 0.0)
+def P_theta_vec(k, k_max, A_s):
+    return np.where(k < k_max, A_s, 0.0)
     
 
 def integrand_eMD_resonant(s,t,k, eta_R, P_func, Y=2.3):
@@ -178,7 +179,7 @@ def integrand_eMD_large_v(s,t,k,k_max,eta_R, P_func):
 
 def compute_Omega_eMD_resonant(k, eta_R, k_max, P_func, Y=2.3):
     """
-    Compute Omega_GW during early matter domination phase using eMD resonant kernel.
+    Compute Omega_GW during radiation domination phase after eMD with sudden reheating using resonant kernel.
     Integral limits: s in [0,1], t in [0, -s + 2*k_max/k - 1] and k < 2*k_max/sqrt(3)
     """ 
     k_thr = 2*k_max/np.sqrt(3)
@@ -197,7 +198,7 @@ def compute_Omega_eMD_resonant(k, eta_R, k_max, P_func, Y=2.3):
 
 def compute_Omega_eMD_large_v(k, eta_R, k_max, P_func):
     """
-    Compute Omega_GW during early matter domination phase using eMD large v kernel.
+    Compute Omega_GW during radiation domination phase after eMD with sudden reheating using large v kernel.
     Integral limits: s in [0,1], t in [0, -s + 2*k_max/k - 1]
     """
     limit_t_upper = lambda s: (-s + 2*k_max/k - 1)
@@ -219,7 +220,7 @@ def compute_Omega_eMD_total(k, eta_R, k_max, P_func, Y=2.3):
 
     return total_omega, total_error
 
-def compute_Omega_eMD_today(k, eta_R, k_max, P_func, Omega_r0_hh,c_g):
+def compute_Omega_eMD_today(k, eta_R, k_max, P_func):
     """ Compute Omega_GW today during radiation domination phase after eMD with sudden reheating.
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2
@@ -228,11 +229,11 @@ def compute_Omega_eMD_today(k, eta_R, k_max, P_func, Omega_r0_hh,c_g):
     x_R= k * eta_R
     Omega_GW, error= compute_Omega_eMD_total(k, eta_R, k_max, P_func)
     Omega_GW = (1/24) * x_R**2 * Omega_GW
-    Omega_GW_today= Omega_GW*Omega_r0_hh*c_g
+    Omega_GW_today= Omega_GW*constants.Omega_r0_hh*constants.c_g
     return Omega_GW_today, error
 
 
-def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=50, N_s=100, N_t_1=100, N_t_2=1000, N_t_3=100):
+def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N_s=100, N_t_1=500, N_t_2=500, N_t_3=700):
     """
     Here it used the simpson integration instead of dblquad. A grid of s-t values is constructed
 
@@ -282,7 +283,7 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=50, N_
     result = integrate.simpson(y=integral_t, x=s, axis=0)
     return result, 0.0
 
-def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=50, N_s=100,N_t=100):
+def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N_t=300):
     """
     Here it used the simpson integration instead of dblquad. A grid of s-t values is constructed
 
@@ -318,15 +319,15 @@ def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=50, N_s=100,N_
     result = integrate.simpson(y=integral_t, x=s, axis=0)
     return result, 0.0
 
-def compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=50, N_s_1=100,N_t=100, N_s_2=100, N_t_1=100, N_t_2=1000, N_t_3=100):
+def compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N_s_1=100,N_t=300, N_s_2=100, N_t_1=500, N_t_2=500, N_t_3=700):
     compute_Omega_eMD_large_v_fast_result, _ = compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max, N_s_1, N_t)
     compute_Omega_eMD_resonant_fast_result, _ = compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y, 
-                                                                                                                    t_max, N_s_2, N_t_1, N_t_2, N_t_3)
+                                                                                t_max, N_s_2, N_t_1, N_t_2, N_t_3)
     total_omega = compute_Omega_eMD_large_v_fast_result + compute_Omega_eMD_resonant_fast_result
     total_error= 0.0
     return total_omega, total_error
 
-def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func, Omega_r0_hh,c_g, t_max=50, N_s_1=100,N_t=100, N_s_2=100, N_t_1=100, N_t_2=1000, N_t_3=100):
+def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func,t_max=100, N_s_1=100,N_t=300, N_s_2=100, N_t_1=500, N_t_2=500, N_t_3=700):
     """ Compute Omega_GW today during radiation domination phase after eMD with sudden reheating using fast method.
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2
@@ -336,7 +337,7 @@ def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func, Omega_r0_hh,c_g, t_max
     Omega_GW, error= compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=t_max, N_s_1=N_s_1,N_t=N_t, N_s_2=N_s_2,
                                                    N_t_1=N_t_1, N_t_2=N_t_2, N_t_3=N_t_3)
     Omega_GW = (1/24) * x_R**2 * Omega_GW
-    Omega_GW_today= Omega_GW*Omega_r0_hh*c_g
+    Omega_GW_today= Omega_GW*constants.Omega_r0_hh*constants.c_g
     error_today= 0.0
     return Omega_GW_today, error_today
 
