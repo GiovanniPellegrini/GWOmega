@@ -1,6 +1,7 @@
 from gwbird.overlap import Response
 import numpy as np
 import constants
+from scipy.interpolate import interp1d
 
 def S0(f):
     return 3*(constants.H0**2)/(10*(np.pi**2)*(f**3))
@@ -37,9 +38,22 @@ def gamma_aet(f):
    gamma_aet[2]=Response.overlap(det1="ET T", det2="ET T",f=f, pol="t",psi=0) # T channel
    return gamma_aet
 
-#capire come io avrò accesso ai dati di frequenza, e come questi mi danno N_autocorrelation 
-def N_f(f):
-   ...
+def N_auto_interp(filename, Nanfill=0.0):
+    """
+    Load the auto-correlation noise amplitude from a file and create an interpolation function.
+    Parameters:
+     filename : str
+          Path to the file containing frequency and noise amplitude data.
+    """
+    data = np.loadtxt(filename)
+    f_data = data[:, 0]
+    N_auto_data = data[:, 1]
+    N_auto_function = interp1d(f_data, N_auto_data, bounds_error=False, fill_value="extrapolate")
+    def N_auto(f):
+        N_values = N_auto_function(f)
+        N_values[np.isnan(N_values)] = Nanfill
+        return N_values**2
+    return N_auto
 
 def N_aet(f, N_auto, f_pivot, N_amplitude, r, n_noise):
     """

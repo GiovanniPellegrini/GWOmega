@@ -1,6 +1,6 @@
 import bilby
 from bilby.core.prior import PriorDict, Uniform, Constraint, LogUniform
-from utils_triangular import gamma_aet, N_aet, S0,S0, constrain
+from utils_triangular import gamma_aet, N_aet,S0, constrain, N_auto_interp
 from data_generation import signal_aet, noise_aet
 from Omega import P_theta_vec, compute_Omega_eMD_today_fast, P_k_lognormal, compute_Omega_RD_today
 import numpy as np
@@ -87,8 +87,9 @@ def run_pe_RD(A_s, sigma, k_peak,r, n_noise, T_obs, N_seg, N_auto,outdir='output
     k_values= f_values * 2 * np.pi
 
     f_pivot = 2.75
-    N_auto=...
-    N_amplitude=...
+    N_func= N_auto_interp("filename")
+    N_auto=N_func(f_values)
+    N_amplitude=float(N_func(f_pivot))
 
     P_func=P_k_lognormal(k_values, k_peak, sigma, A_s)
     Omega_gw,_=compute_Omega_RD_today(k_values, constants.cs_value, P_func)
@@ -212,8 +213,9 @@ def run_pe_eMD(A_s, eta_R, k_max,r, n_noise, T_obs, N_seg, N_auto,outdir='output
     k_values= f_values * 2 * np.pi
 
     f_pivot = 2.75
-    N_auto=...
-    N_amplitude=...
+    N_func= N_auto_interp("filename")
+    N_auto=N_func(f_values)
+    N_amplitude=float(N_func(f_pivot))
     
     P_func=P_theta_vec(k_values,k_max,A_s)
     Omega_gw,_=compute_Omega_eMD_today_fast(k_values,eta_R,k_max,P_func)
