@@ -1,6 +1,7 @@
 import bilby
 from bilby.core.prior import PriorDict, Uniform, Constraint, LogUniform
-from utils_triangular import gamma_aet, N_aet, S0, signal_aet, noise_aet, S0, constrain
+from utils_triangular import gamma_aet, N_aet, S0,S0, constrain
+from data_generation import signal_aet, noise_aet
 from Omega import P_theta_vec, compute_Omega_eMD_today_fast, P_k_lognormal, compute_Omega_RD_today
 import numpy as np
 import functools
@@ -64,8 +65,8 @@ class SigwEstimatorLikelihood_RD(bilby.Likelihood):
         A_s = self.parameters["A_s"]
         sigma = self.parameters["sigma"]
         k_peak = self.parameters["k_peak"]
-        
-        P_theta = P_k_lognormal(self.k, k_peak, sigma, A_s)
+            
+        P_theta = lambda k: P_k_lognormal(k, k_peak, sigma, A_s)
         Omega_gw,_ = compute_Omega_RD_today(self.k, cs_value=constants.cs_value, P_func=P_theta)
         
 
@@ -142,7 +143,7 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
     def __init__(self,C_hat,f, T_seg, T_obs, N_auto, f_pivot, N_amplitude):
         """
         Parameters
-        C_hat : array_like
+        C_hat : array_like (2, len(f))
             Estimated cross-correlation spectrum.
         f : array_like
             Frequency array.
@@ -187,7 +188,7 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
         k_max = self.parameters["k_max"]
         A_s = self.parameters["A_s"]
         eta_R=120/k_max  #s
-        P_theta = P_theta_vec(self.k, k_max, A_s)
+        P_theta =lambda k: P_theta_vec(k, k_max, A_s)
         Omega_gw,_ = compute_Omega_eMD_today_fast(self.k, eta_R, k_max, P_theta)
         
 
