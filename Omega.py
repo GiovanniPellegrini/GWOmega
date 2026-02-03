@@ -66,7 +66,7 @@ def compute_Omega_RD(k, cs_value, P_func):
     return result, error
     
 
-def compute_Omega_RD_fast(k, cs_value, P_func, t_max=100, N_s=100, N_t_1=100, N_t_2=100, N_t_3=700):
+def compute_Omega_RD_fast(k, cs_value, P_func, t_max=100, N_s=10, N_t_1=50, N_t_2=100, N_t_3=700):
     """
     Here it used the simpson integration instead of dblquad. A grid of s-t values is constructed
 
@@ -120,7 +120,7 @@ def compute_Omega_RD_today(k, cs_value, P_func):
     return Omega_GW_today, error
 
 
-def compute_Omega_RD_today_fast(k, cs_value, P_func, t_max=100, N_s=100, N_t_1=100, N_t_2=100, N_t_3=700):
+def compute_Omega_RD_today_fast(k, cs_value, P_func, t_max=100, N_s=10, N_t_1=50, N_t_2=100, N_t_3=700):
     """ Compute Omega_GW today during radiation domination phase using fast method
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2
@@ -129,7 +129,7 @@ def compute_Omega_RD_today_fast(k, cs_value, P_func, t_max=100, N_s=100, N_t_1=1
     Omega_RD, error= compute_Omega_RD_fast(k,cs_value,P_func,t_max,N_s,N_t_1,N_t_2,N_t_3)
     Omega_GW_today= (1/24)*Omega_RD*constants.Omega_r0_hh*constants.c_g
     error_today= 0.0
-    return Omega_GW_today, error_today
+    return Omega_GW_today
 
 
 """ 
@@ -201,6 +201,9 @@ def compute_Omega_eMD_large_v(k, eta_R, k_max, P_func):
     Compute Omega_GW during radiation domination phase after eMD with sudden reheating using large v kernel.
     Integral limits: s in [0,1], t in [0, -s + 2*k_max/k - 1]
     """
+    k_thr = 2*k_max/np.sqrt(3)
+    if k > k_thr:
+        return 0.0, 0.0
     limit_t_upper = lambda s: (-s + 2*k_max/k - 1)
     limit_t_lower = lambda s: 0  
     result, error = integrate.dblquad(
@@ -304,6 +307,8 @@ def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N
     if not np.any(mask):
         return 0.0, 0.0
     
+    if np.any(k > 2*k_max/np.sqrt(3)):
+        return 0.0, 0.0
     
     prefactor_integrand = (T * (T + 2) * (1 - S**2)/((1 + T - S) * (1 + T + S)))**2
     I=kernel_eMD_large_v(S, T, k, eta_R)
@@ -339,6 +344,5 @@ def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func,t_max=100, N_s_1=100,N_
     Omega_GW = (1/24) * x_R**2 * Omega_GW
     Omega_GW_today= Omega_GW*constants.Omega_r0_hh*constants.c_g
     error_today= 0.0
-    return Omega_GW_today, error_today
-
+    return Omega_GW_today
                         

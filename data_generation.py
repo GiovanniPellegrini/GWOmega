@@ -1,6 +1,10 @@
 import numpy as np
 from utils_triangular import S0, N_aet, gamma_aet
+from utils_2L import gamma_2L, N_auto_interp
 
+"""
+Data generation functions for the Einstein Telescope A and E channels in a triangular configuration. We consider a correlated noise model.
+"""
 
 def signal_aet(f, Omega_gw, T_seg, N_seg):
     """
@@ -40,4 +44,44 @@ def noise_aet(f, N_auto, f_pivot, N_amplitude, r, n_noise, T_seg, N_seg):
     n=np.sqrt(0.5*T_seg*N_aet(f, N_auto, f_pivot, N_amplitude, r, n_noise)[:2])
     n_re = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n
     n_im = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n 
+    return n_re + 1j * n_im
+
+
+
+
+"""
+Data generation functions for the Einstein Telescope 2L configuration. We consider an uncorrelated noise model.
+"""
+
+def signal_2L(f, Omega_gw, T_seg, N_seg, shift_angle):
+    """
+    Compute the signal matrix for the 2L configuration of the Einstein Telescope.
+    Parameters:
+     f : array_like
+            Frequency array.
+     T_seg : float
+            Segment time duration.
+     N_seg : int
+            Number of segments.
+     shift_angle : float
+            Shift angle between the two L-shaped detectors in radians.
+    """
+
+    gamma= gamma_2L(f, shift_angle)
+    gamma_matrix=np.array([[np.ones(len(f)), gamma], [gamma, np.ones(len(f))]])
+    h=np.sqrt(0.5*T_seg*S0(f)*Omega_gw)
+
+    h_re =  np.zeros((N_seg, 2, len(f)))
+    h_im =  np.zeros((N_seg, 2, len(f)))
+    for i in range(len(f)):
+        h_re[:,:,i]=np.random.multivariate_normal(np.zeros(2), 0.5*gamma_matrix[:,:,i], N_seg)*h[i]
+        h_im[:,:,i]=np.random.multivariate_normal(np.zeros(2), 0.5*gamma_matrix[:,:,i], N_seg)*h[i]
+    
+    return h_re + 1j * h_im
+
+def noise_2L(f, N_auto, T_seg, N_seg):
+
+    n=np.sqrt(0.5*T_seg*N_auto)
+    n_re = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n
+    n_im = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n
     return n_re + 1j * n_im

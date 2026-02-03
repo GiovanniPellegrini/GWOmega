@@ -1,5 +1,5 @@
 from gwbird.overlap import Response
-import numpy as np
+import numpy as np, inspect
 import constants
 from scipy.interpolate import interp1d
 
@@ -32,7 +32,7 @@ def gamma_aet(f):
          Frequency array.
    """
 
-   gamma_aet=np.zeros(3, len(f))
+   gamma_aet=np.zeros((3, len(f)))
    gamma_aet[0]=Response.overlap(det1="ET A", det2="ET A",f=f, pol="t",psi=0) # A channel
    gamma_aet[1]=Response.overlap(det1="ET E", det2="ET E",f=f, pol="t",psi=0) # E channel
    gamma_aet[2]=Response.overlap(det1="ET T", det2="ET T",f=f, pol="t",psi=0) # T channel
@@ -73,14 +73,17 @@ def N_aet(f, N_auto, f_pivot, N_amplitude, r, n_noise):
 
 def constrain(f, N_auto, f_pivot, N_amplitude, parameters):
     """
-    Function to include in the prior constraints on the noise parameters, in particula -0.5<= (N_corr/N_auto) <=1.
-
+    Function to include in the prior constraints on the noise parameters.
     """    
+    res = []
+    r = parameters["r"]
+    n_noise = parameters["n_noise"]
+    factor = 1 + (1 - np.sign(r)) / 2
     
-    N_corr = noise_power_law(f, f_pivot, N_amplitude, parameters["r"],parameters["n_noise"]) 
-    factor = 1 + (1 - np.sign(parameters["r"])) / 2
-    res = N_auto - factor * np.abs(N_corr)
-    parameters['min_res'] = np.min(res, axis=0)
+    for i in range(len(f)):
+        N_corr_i = N_amplitude * r * (f[i] / f_pivot) ** n_noise
+        res.append(N_auto[i] - factor * np.abs(N_corr_i))
+    
+    parameters['min_res'] = np.min(np.array(res), axis=0)
     return parameters
-    
        

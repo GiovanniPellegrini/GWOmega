@@ -2,13 +2,13 @@ import bilby
 from bilby.core.prior import PriorDict, Uniform, Constraint, LogUniform
 from utils_triangular import gamma_aet, N_aet,S0, constrain, N_auto_interp
 from data_generation import signal_aet, noise_aet
-from Omega import P_theta_vec, compute_Omega_eMD_today_fast, P_k_lognormal, compute_Omega_RD_today
+from Omega import P_theta_vec, compute_Omega_eMD_today_fast, P_k_lognormal, compute_Omega_RD_today_fast
 import numpy as np
 import functools
 import json
 import constants
     
-class SigwEstimatorLikelihood_RD(bilby.Likelihood):
+class SigwEstimatorLikelihood_triangular_RD(bilby.Likelihood):
     """
     Likelihood class for the SGWB estimator in the Einstein Telescope in triangular configuration.
     Sigw are produced during Radiation Domination (RD).
@@ -67,7 +67,8 @@ class SigwEstimatorLikelihood_RD(bilby.Likelihood):
         k_peak = self.parameters["k_peak"]
             
         P_theta = lambda k: P_k_lognormal(k, k_peak, sigma, A_s)
-        Omega_gw,_ = compute_Omega_RD_today(self.k, cs_value=constants.cs_value, P_func=P_theta)
+        Omega_gw = Omega_gw = [compute_Omega_RD_today_fast(float(k), constants.cs_value, P_theta)
+                                             for k in self.k]
         
 
     
@@ -76,48 +77,50 @@ class SigwEstimatorLikelihood_RD(bilby.Likelihood):
         sigma=C_bar**2 / self.N_seg
         log=-0.5*((self.C_hat - C_bar)**2 / sigma + np.log(2*np.pi*sigma))
         return np.sum(log)
-    
 
-def run_pe_RD(A_s, sigma, k_peak,r, n_noise, T_obs, N_seg, N_auto,outdir='output_pe_triangular_RD'):
+
+def run_pe_triangula_RD(A_s, sigma, k_peak,r, n_noise, T_obs, N_seg,outdir='output_pe_triangular_RD'):
     T_seg= T_obs / N_seg
     df= 1 / T_seg
-    f_min = (0.001 * k_peak) / (2 * np.pi)
-    f_max = (1000 * k_peak) / (2 * np.pi)
-    f_values = np.arange(f_min, f_max+df, df)
+    f_values= np.arange(1, 200, df)
     k_values= f_values * 2 * np.pi
 
     f_pivot = 2.75
-    N_func= N_auto_interp("filename")
+    N_func= N_auto_interp("data/ET_Sh_coba.txt")
     N_auto=N_func(f_values)
     N_amplitude=float(N_func(f_pivot))
 
-    P_func=P_k_lognormal(k_values, k_peak, sigma, A_s)
-    Omega_gw,_=compute_Omega_RD_today(k_values, constants.cs_value, P_func)
+    P_func= lambda k: P_k_lognormal(k, k_peak, sigma, A_s)
+    Omega_gw = [
+    compute_Omega_RD_today_fast(float(k), constants.cs_value, P_func)    for k in k_values
+    ]
+
     h=signal_aet(f_values, Omega_gw,T_seg, N_seg)
-    n= noise_aet(f_values, N_auto, f_pivot, N_amplitude, r ,n_noise)
+    n= noise_aet(f_values, N_auto, f_pivot, N_amplitude, r ,n_noise, T_seg, N_seg)
     data=h+n
     C_hat=(2/(T_seg*S0(f_values)))*np.abs(data)**2
     C_hat=np.sum(C_hat, axis=0) / N_seg
-    likelihood=SigwEstimatorLikelihood_RD(C_hat,f_values, T_seg,T_obs, N_auto, f_pivot, N_amplitude)
+    likelihood=SigwEstimatorLikelihood_triangular_RD(C_hat,f_values, T_seg,T_obs, N_auto, f_pivot, N_amplitude)
+    
+
     
     priors = PriorDict(conversion_function=functools.partial(constrain, f_values, N_auto, f_pivot, N_amplitude))
     priors['r']       = Uniform(-0.5, 1, '$r$') 
     priors['n_noise'] = Uniform(-10, -5, '$n_{\\text{noise}}$')
-    priors['A_s']     = LogUniform(1e-10, 1e-8, '$A_{\\text{s}}$')
-    priors['sigma']   = LogUniform(0.1, 2, '$\\sigma$')
-    priors['k_peak']  = LogUniform(1, 1e3, '$k_{\\text{peak}}$')
-    priors['min_res'] = Constraint(minimum=0. , maximum=np.max(N_auto))
-    
+    priors['A_s']     = LogUniform(1e-4, 1e-1, '$A_{\\text{s}}$')
+    priors['sigma']   = Uniform(0.1, 1, '$\\sigma$')
+    priors['k_peak']  = Uniform(1, 300, '$k_{\\text{peak}}$')
+    priors['min_res'] = Constraint(minimum=0. , maximum=np.max(N_auto))    
     true_parameters = {'r': r, 'n_noise': n_noise, 'A_s': A_s, 'sigma': sigma, 'k_peak': k_peak}
     label = "estimator RD"+f'_A{A_s:.1f}_kpeak{k_peak:.1f}_sigma{sigma:.2f}_r{r:.2f}_n{n_noise:.2f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
-    
     result = bilby.run_sampler(likelihood = likelihood, 
                             priors = priors, 
                             sampler='dynesty',
                             label=label, 
                             outdir=outdir,
-                            npool = 5,
-                            nlive=2000,
+                            npool = 7,
+                            nlive=200,
+                            print_progress=True,
                             injection_parameters = true_parameters,
                             )
     result.plot_corner(truths=true_parameters)
@@ -134,7 +137,7 @@ def run_pe_RD(A_s, sigma, k_peak,r, n_noise, T_obs, N_seg, N_auto,outdir='output
 
 
 # Likelihood for eMD. Still to undestand if eta_R should be a parameter or fixed. In case it is a parameter, then should be a constrain between k_max and A_s.
-class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
+class SigwEstimatorLikelihood_triangular_eMD(bilby.Likelihood):
     """
     Likelihood class for the SGWB estimator in the Einstein Telescope in triangular configuration.
     Sigw are produced during sudden transition between early Matter Domination (eMD) and Radiation Domination (RD).
@@ -190,7 +193,7 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
         A_s = self.parameters["A_s"]
         eta_R=120/k_max  #s
         P_theta =lambda k: P_theta_vec(k, k_max, A_s)
-        Omega_gw,_ = compute_Omega_eMD_today_fast(self.k, eta_R, k_max, P_theta)
+        Omega_gw = compute_Omega_eMD_today_fast(self.k, eta_R, k_max, P_theta)
         
 
     
@@ -203,7 +206,7 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
 
 
 
-def run_pe_eMD(A_s, eta_R, k_max,r, n_noise, T_obs, N_seg, N_auto,outdir='output_pe_triangular_eMD'):
+def run_pe_eMD(A_s, eta_R, k_max,r, n_noise, T_obs, N_seg,outdir='output_pe_triangular_eMD'):
     k_thr = 2 * k_max / np.sqrt(3)
     T_seg= T_obs / N_seg
     f_min = (0.02 * k_max) / (2 * np.pi)
@@ -217,14 +220,15 @@ def run_pe_eMD(A_s, eta_R, k_max,r, n_noise, T_obs, N_seg, N_auto,outdir='output
     N_auto=N_func(f_values)
     N_amplitude=float(N_func(f_pivot))
     
+    
     P_func=P_theta_vec(k_values,k_max,A_s)
-    Omega_gw,_=compute_Omega_eMD_today_fast(k_values,eta_R,k_max,P_func)
+    Omega_gw=compute_Omega_eMD_today_fast(k_values,eta_R,k_max,P_func)
     h=signal_aet(f_values, Omega_gw,T_seg, N_seg)
     n= noise_aet(f_values, N_auto, f_pivot, N_amplitude, r ,n_noise)
     data=h+n
     C_hat=(2/(T_seg*S0(f_values)))*np.abs(data)**2
     C_hat=np.sum(C_hat, axis=0) / N_seg
-    likelihood=SigwEstimatorLikelihood_eMD(C_hat,f_values, T_seg,T_obs, N_auto, f_pivot, N_amplitude)
+    likelihood=SigwEstimatorLikelihood_triangular_eMD(C_hat,f_values, T_seg,T_obs, N_auto, f_pivot, N_amplitude)
 
     priors = PriorDict(conversion_function=functools.partial(constrain, f_values, N_auto, f_pivot, N_amplitude))
     priors['r']       = Uniform(-0.5, 1, '$r$') 
@@ -245,7 +249,6 @@ def run_pe_eMD(A_s, eta_R, k_max,r, n_noise, T_obs, N_seg, N_auto,outdir='output
                             nlive=2000,
                             injection_parameters = true_parameters,
                             )  
-    
     result.plot_corner(truths=true_parameters)
   
     posterior_dict = {}
