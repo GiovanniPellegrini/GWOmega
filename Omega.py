@@ -132,6 +132,59 @@ def compute_Omega_RD_today_fast(k, cs_value, P_func, t_max=100, N_s=10, N_t_1=50
     return Omega_GW_today
 
 
+
+def precompute_geometry(t_max=100, N_s=10, N_t_1=50, N_t_2=100, N_t_3=700):
+    eps = 1e-10 
+    s = np.linspace(0, 1-eps, N_s)
+    t_sing = (1.0 / constants.cs_value) - 1.0  
+    
+    # Costruzione griglia t (focus sulla singolarità)
+    width = 0.05 
+    t1 = np.linspace(1e-4, t_sing - width, N_t_1)
+    t2 = np.linspace(t_sing - width, t_sing + width, N_t_2)
+    t3 = np.linspace(t_sing + width, t_max, N_t_3)
+    t = np.unique(np.concatenate([t1, t2, t3]))
+    
+    # Meshgrid e Kernel Geometrico
+    S, T = np.meshgrid(s, t, indexing='ij')
+    U = (T + S + 1) / 2
+    V = (T - S + 1) / 2
+    
+    prefactor = (T * (T + 2) * (1 - S**2)/((1 + T - S) * (1 + T + S)))**2
+    I_val = analytical_kernel_RD_vec(U, V, x_val=1, cs_value=constants.cs_value)
+    
+    Geo_Kernel = 4 * prefactor * I_val
+    return s, t, S, T, Geo_Kernel
+
+def compute_Omega_vectorized(k_values, k_peak, sigma, geometry_data, A_s=1):
+    s,t, S, T, Geo_Kernel = geometry_data
+    S=S[..., None]
+    T=T[..., None]
+    k= k_values[None, None, :] #broadcasting for k values ()
+
+    k1= k * (1 + T + S)/2
+    k2= k * (1 + T - S)/2
+    P1= P_k_lognormal(k1, k_peak, sigma, A=A_s)
+    P2= P_k_lognormal(k2, k_peak, sigma, A=A_s)
+    Z= Geo_Kernel[..., None] * P1 * P2
+    integral_t= integrate.simpson(y=Z, x=t, axis=1)
+    result_raw= integrate.simpson(y=integral_t, x=s, axis=0)
+    result_today= (1/24) * result_raw * constants.Omega_r0_hh * constants.c_g
+    return result_today
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 """ 
     Functions for computing Omega_GW during early matter domination (eMD) phase.
 """
