@@ -34,3 +34,10 @@ def N_auto_interp(filename, Nanfill=0.0):
         return N_values**2
     return N_auto
 
+def constrain(parameters):
+    eta_R = parameters['eta_R']
+    k_max = parameters['k_max']
+    prod = eta_R * k_max
+    prod_scalar = np.asarray(prod).item() if np.asarray(prod).size == 1 else prod
+    parameters['product_eta_k'] = prod_scalar
+    return parameters

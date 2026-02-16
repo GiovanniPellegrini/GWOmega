@@ -364,12 +364,17 @@ def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N
         return 0.0, 0.0
     
     prefactor_integrand = (T * (T + 2) * (1 - S**2)/((1 + T - S) * (1 + T + S)))**2
+    #print("prefactor shape:", prefactor_integrand.shape)
     I=kernel_eMD_large_v(S, T, k, eta_R)
+    #print("I shape:", I.shape)
     k1 = k * (1 + T + S)/2
     k2 = k * (1 + T - S)/2
+    #print("k1 shape:", k1.shape)
+    #print("k2 shape:", k2.shape)
     P_ku = P_func(k1)
     P_kv = P_func(k2)
     Z = 4 * I * P_ku * P_kv * prefactor_integrand
+    #print("Z shape:", Z.shape)
     Z[~mask] = 0.0
     
     #integration with simpson's method

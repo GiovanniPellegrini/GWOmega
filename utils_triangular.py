@@ -84,6 +84,23 @@ def constrain(f, N_auto, f_pivot, N_amplitude, parameters):
         N_corr_i = N_amplitude * r * (f[i] / f_pivot) ** n_noise
         res.append(N_auto[i] - factor * np.abs(N_corr_i))
     
-    parameters['min_res'] = np.min(np.array(res), axis=0)
+    parameters['min_res'] = float(np.min(res))
+    if 'eta_R' in parameters and 'k_max' in parameters:
+        # Calcoliamo il prodotto che vogliamo vincolare
+        prod= parameters['eta_R'] * parameters['k_max']
+        prod_scalar = np.asarray(prod).item() if np.asarray(prod).size == 1 else prod
+        parameters['product_eta_k'] = prod_scalar
     return parameters
-       
+
+class ConstrainWrapper:
+    """
+    Wrapper class for the constrain function to make it picklable for multiprocessing.
+    """
+    def __init__(self, f, N_auto, f_pivot, N_amplitude):
+        self.f = f
+        self.N_auto = N_auto
+        self.f_pivot = f_pivot
+        self.N_amplitude = N_amplitude
+    
+    def __call__(self, parameters):
+        return constrain(self.f, self.N_auto, self.f_pivot, self.N_amplitude, parameters)
