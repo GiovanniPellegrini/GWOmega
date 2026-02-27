@@ -1,7 +1,7 @@
 import bilby
 from bilby.core.prior import PriorDict, Uniform, Constraint, LogUniform
 from utils_triangular import gamma_aet, N_aet,S0, constrain, N_auto_interp, ConstrainWrapper
-from data_generation import signal_aet, noise_aet,load_parameters_from_file, check_parameters, load_C_hat
+from data_generation_triangular import signal_aet, noise_aet,load_parameters_from_file, check_parameters, load_C_hat
 from gwbird import snr
 from gwbird import snr
 from interpolation import ScaledInterpolatorRD, ScaledInterpolatorEMD
@@ -134,8 +134,8 @@ def run_pe_triangula_RD(A_s, sigma, k_peak,r, n_noise, T_obs, N_seg, C_hat_filen
     priors['r']       = Uniform(-0.5, 1, '$r$') 
     priors['n_noise'] = Uniform(-10, -5, '$n_{\\text{noise}}$')
     priors['A_s']     = LogUniform(1e-4, 5e-2, '$A_{\\text{s}}$')
-    priors['sigma']   = Uniform(0.3, 1, '$\\sigma$')
-    priors['k_peak']  = Uniform(30, 250, '$k_{\\text{peak}}$')
+    priors['sigma']   = Uniform(1e-2, 1, '$\\sigma$')
+    priors['k_peak']  = Uniform(1*(2*np.pi), 300*(2*np.pi), '$k_{peak}$') 
     priors['min_res'] = Constraint(minimum=0. , maximum=np.max(N_auto)) 
 
     true_parameters = {'r': r, 'n_noise': n_noise, 'A_s': A_s, 'sigma': sigma, 'k_peak': k_peak}
@@ -307,10 +307,10 @@ class SigwEstimatorLikelihood_triangular_eMD(bilby.Likelihood):
         self.f_pivot = f_pivot
         self.N_amplitude = N_amplitude
         self.gamma_matrix= gamma_aet(self.f)[:2]
-        self.interpolator= ScaledInterpolatorEMD('omega_grid_eMD_75x75.pkl')
+        self.interpolator= ScaledInterpolatorEMD('omega_grid_eM.pkl')
         self.S0=S0(self.f)
         
-        super().__init__(parameters={"n_noise": None, "r": None, "A_s": None,"k_max": None,"eta_R":None })
+        super().__init__(parameters={"n_noise": None, "r": None, "A_s": None,"k_max": None,"x_R":None })
         """
         initial parameters:
         n_noise : float
@@ -327,7 +327,8 @@ class SigwEstimatorLikelihood_triangular_eMD(bilby.Likelihood):
         r = self.parameters["r"]
         A_s = self.parameters["A_s"]
         k_max = self.parameters["k_max"]
-        eta_R=self.parameters["eta_R"]
+        x_R= self.parameters["x_R"]
+        eta_R = x_R / k_max
     
         Omega_gw=self.interpolator(k_max,eta_R, A_s)
         Omega_gw=np.array(Omega_gw)
@@ -386,17 +387,14 @@ def run_pe_triangular_eMD(A_s, k_max, eta_R,r, n_noise, T_obs, N_seg,C_hat_filen
     priors['r']       = Uniform(-0.5, 1, '$r$') 
     priors['n_noise'] = Uniform(-10, -5, '$n_{\\text{noise}}$')
     priors['A_s']     = LogUniform(1e-10, 1e-8, '$A_{\\text{s}}$')
-    priors['k_max']   = Uniform(50, 250, '$k_{\\text{max}}$')
-    priors['eta_R']   = Uniform(0.6, 5, '$\\eta_R$')
-    priors['product_eta_k'] = Constraint(minimum=50., maximum=200.)
+    priors['k_max']   =  Uniform((2*np.pi), 300*(2*np.pi), '$k_{\\text{max}}$')
+    priors['x_R']     = Uniform(1e-2, 120, '$\\eta_{R}$')
+    #priors['product_eta_k'] = Constraint(minimum=50., maximum=150.)
     priors['min_res'] = Constraint(minimum=0. , maximum=np.max(N_auto)) 
 
-    print("Priors created successfully")
-    print("Testing prior sampling...")
-    test_sample = priors.sample()
-    print(f"Test sample: {test_sample}")
-    true_parameters = {'r': r, 'n_noise': n_noise, 'A_s': A_s, 'k_max': k_max, 'eta_R': eta_R}
-    label = "estimator eMD"+f'_A{A_s:.1f}_kmax{k_max:.1f}_eta_R{eta_R:.2f}_r{r:.2f}_n{n_noise:.2f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
+    x_R_true = k_max * eta_R
+    true_parameters = {'A_s': A_s, 'k_max': k_max, 'x_R': x_R_true}
+    label = "estimator eMD"+f'_A{A_s:.1f}_kmax{k_max:.1f}_x_R{x_R_true:.2f}_r{r:.2f}_n{n_noise:.2f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
     result = bilby.run_sampler(
         likelihood=likelihood,
         priors=priors,

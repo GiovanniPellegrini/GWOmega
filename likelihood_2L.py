@@ -1,7 +1,7 @@
 import bilby
 from bilby.core.prior import PriorDict, Uniform, Constraint, LogUniform
 from utils_2L import gamma_2L, S0, N_auto_interp, constrain
-from data_generation import signal_2L, noise_2L, write_parameters_to_file, load_parameters_from_file, check_parameters, load_C_hat
+from data_generation_2L import signal_2L, noise_2L, write_parameters_to_file, load_parameters_from_file, check_parameters, load_C_hat
 from gwbird import snr
 from Omega import P_theta_vec, compute_Omega_eMD_today_fast, P_k_lognormal, compute_Omega_RD_today_fast
 from interpolation import ScaledInterpolatorRD, ScaledInterpolatorEMD
@@ -119,8 +119,8 @@ def run_pe_2L_RD(A_s, k_peak, sigma, T_obs, N_seg, C_hat_filename, parameters_fi
     likelihood=SigwEstimatorLikelihood_RD(C_hat,f_values, T_seg,T_obs, N_auto, shift_angle)
     priors = PriorDict()
     priors['A_s']       = LogUniform(1e-4, 5*10**(-2), '$A_s$') 
-    priors['sigma']     = Uniform(0.3, 1, '$\sigma$') 
-    priors['k_peak']    = Uniform(30, 250, '$k_{peak}$') 
+    priors['sigma']     = Uniform(1e-2, 1, '$\sigma$') 
+    priors['k_peak']    = Uniform(1*(2*np.pi), 300*(2*np.pi), '$k_{peak}$') 
 
     true_parameters = {'A_s': A_s, 'sigma': sigma, 'k_peak': k_peak}
     label = "estimator RD"+f'_A{A_s:.4f}_sigma{sigma:.1f}_kpeak{k_peak:.1f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
@@ -281,8 +281,8 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
         self.gamma= gamma_2L(self.f, shift_angle)
         self.N_auto = N_auto
         self.S0= S0(self.f)
-        self.interpolator= ScaledInterpolatorEMD('omega_grid_eMD_75x75.pkl')
-        super().__init__(parameters={"A_s": None,  "k_max": None, "eta_R": None})
+        self.interpolator= ScaledInterpolatorEMD('omega_grid_eMD.pkl')
+        super().__init__(parameters={"A_s": None,  "k_max": None, "x_R": None})
         """
         Initial parameters
         A_s : float
@@ -298,7 +298,8 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
     def log_likelihood(self):
         A_s= self.parameters["A_s"]
         k_max= self.parameters["k_max"]
-        eta_R= self.parameters["eta_R"]
+        x_R= self.parameters["x_R"]
+        eta_R = x_R / k_max
 
         Omega_gw = self.interpolator(k_max, eta_R, A_s)
         Omega_gw = np.array(Omega_gw)
@@ -348,16 +349,19 @@ def run_pe_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0,outdir='output_
     N_func= N_auto_interp("data/ET_15km_ASD.txt")
     N_auto=N_func(f_values)
 
+    
+
+
     # Run parameter estimation
     likelihood=SigwEstimatorLikelihood_eMD(C_hat,f_values, T_seg,T_obs, N_auto, shift_angle)
-    priors = PriorDict(conversion_function=constrain)
+    priors = PriorDict()
     priors['A_s']     = LogUniform(1e-10, 1e-8, '$A_{\\text{s}}$')
-    priors['k_max']   = Uniform(50, 250, '$k_{\\text{max}}$')
-    priors['eta_R']   = Uniform(0.6, 5, '$\\eta_R$')
-    priors['product_eta_k'] = Constraint(minimum=50., maximum=200.)
+    priors['k_max']   = Uniform((2*np.pi), 300*(2*np.pi), '$k_{\\text{max}}$')
+    priors['x_R']     = Uniform(1e-2, 120, '$x_R = k_{\\text{max}}\\,\\eta_R$')
 
-    true_parameters = {'A_s': A_s, 'k_max': k_max, 'eta_R': eta_R}
-    label = "estimator RD"+f'_A{A_s:.4f}_kmax{k_max:.1f}_etaR{eta_R:.1f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
+    x_R_true = k_max * eta_R
+    true_parameters = {'A_s': A_s, 'k_max': k_max, 'x_R': x_R_true}
+    label = "estimator RD"+f'_A{A_s:.4f}_kmax{k_max:.1f}_xR{x_R_true:.1f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
     result = bilby.run_sampler(
         likelihood=likelihood,
         priors=priors,
@@ -369,8 +373,9 @@ def run_pe_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0,outdir='output_
         injection_parameters=true_parameters,
         check_point_plot=False,
     )
-
     
+
+
     # plot corner with custom formatting for the titles and axes
     try:
         import scienceplots  # Importa qui per assicurarsi che sia caricato

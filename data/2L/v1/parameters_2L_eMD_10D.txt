@@ -1,0 +1,7 @@
+A_s: 2e-09
+k_max: 120
+eta_R: 0.96
+T_obs: 864000
+N_seg: 86400
+T_seg: 10.0
+shift_angle: 0

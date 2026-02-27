@@ -1,0 +1,7 @@
+A_s: 0.0031622776601683794
+k_peak: 100
+sigma: 0.5
+T_obs: 950400
+N_seg: 95040
+T_seg: 10.0
+shift_angle: 0
