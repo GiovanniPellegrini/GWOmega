@@ -19,6 +19,11 @@ def tranform_to_uv(s,t):
     return u,v
 
 
+def smooth_cutfoff(k, k_peak, sigma):
+    """Smooth cutoff function to avoid numerical instabilities in the power spectrum for k values larger than 2*k_peak/sqrt(3)."""
+    return 0.5 * (1 + erfc((k - 2*k_peak/np.sqrt(3)) / (sigma * 2 * np.sqrt(2))))
+    
+
 
 def P_k_lognormal(k, k_p, sigma, A):
     """
@@ -307,6 +312,8 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     if t_sing > t_max:
         t= np.linspace(1e-4, t_max+1e-4, N_t_1+N_t_2+N_t_3)
 
+    
+
     else:
         width=0.05
         t1= np.linspace(1e-4, t_sing - width, N_t_1)
@@ -321,8 +328,6 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     if not np.any(mask):
         return 0.0, 0.0
     
-    if np.any(k > 2*k_max/np.sqrt(3)):
-        return 0.0, 0.0
     
     
     prefactor_integrand = (T * (T + 2) * (1 - S**2)/((1 + T - S) * (1 + T + S)))**2
@@ -337,7 +342,15 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     #integration with simpson's method
     integral_t = integrate.simpson(y=Z, x=t, axis=1)
     result = integrate.simpson(y=integral_t, x=s, axis=0)
-    return result, 0.0
+    k_thr = 2 * k_max / np.sqrt(3)
+    delta_k = 0.01 * k_thr
+    
+    # Se k <= k_thr il damping è 1.0 (non altera nulla).
+    # Se k > k_thr calcola l'erfc. A k = k_thr, erfc(0) = 1.0 -> Si attacca perfettamente.
+    damping = np.where(k <= k_thr, 1.0, erfc((k - k_thr) / delta_k))
+    
+    return result * damping, 0.0
+    
 
 def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N_t=300):
     """
@@ -353,34 +366,39 @@ def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N
     s= np.linspace(0, 1-eps, N_s)
     t_max=2*k_max/k -1
     t= np.linspace(1e-4, t_max, N_t)
+ 
+
+
     S = s[:, None]
     T = t[None, :]
     # constructing the integrand as in "integrand_eMD_large_v" function, using the mask to restrict the integration domain
     mask= (T<= -S + 2*k_max/k -1) & ( (1 + T - S) >0) & ( (1 + T + S) >0) 
     if not np.any(mask):
         return 0.0, 0.0
+
     
-    if np.any(k > 2*k_max/np.sqrt(3)):
-        return 0.0, 0.0
+    
     
     prefactor_integrand = (T * (T + 2) * (1 - S**2)/((1 + T - S) * (1 + T + S)))**2
-    #print("prefactor shape:", prefactor_integrand.shape)
     I=kernel_eMD_large_v(S, T, k, eta_R)
-    #print("I shape:", I.shape)
     k1 = k * (1 + T + S)/2
     k2 = k * (1 + T - S)/2
-    #print("k1 shape:", k1.shape)
-    #print("k2 shape:", k2.shape)
     P_ku = P_func(k1)
     P_kv = P_func(k2)
     Z = 4 * I * P_ku * P_kv * prefactor_integrand
-    #print("Z shape:", Z.shape)
     Z[~mask] = 0.0
-    
+
     #integration with simpson's method
     integral_t = integrate.simpson(y=Z, x=t, axis=1)
     result = integrate.simpson(y=integral_t, x=s, axis=0)
-    return result, 0.0
+    k_thr = 2 * k_max / np.sqrt(3)
+    delta_k = 0.01 * k_thr
+    
+   
+    damping = np.where(k <= k_thr, 1.0, erfc((k - k_thr) / delta_k))
+    
+    return result * damping, 0.0
+
 
 def compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N_s_1=100,N_t=300, N_s_2=100, N_t_1=500, N_t_2=500, N_t_3=700):
     compute_Omega_eMD_large_v_fast_result, _ = compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max, N_s_1, N_t)

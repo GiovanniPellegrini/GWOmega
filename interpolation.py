@@ -51,7 +51,7 @@ def load_grid_RD(filename):
 
 def create_interpolator_RD(filename):
     grid_data, Omega_grid = load_grid_RD(filename)
-    interpolator = RegularGridInterpolator(grid_data, Omega_grid, bounds_error=False, fill_value=None)
+    interpolator = RegularGridInterpolator(grid_data, Omega_grid,  bounds_error=False, fill_value=None)
     return interpolator
 
 
@@ -68,10 +68,12 @@ class ScaledInterpolatorRD:
     
 
 
+
+
 # Funzione worker da eseguire in parallelo (deve essere top-level per pickle)
 def _compute_row(args):
-    i, j, k_max, eta_R, k_values = args
-
+    i, j, k_max, x_R, k_values = args
+    eta_R=x_R/ k_max
     P_func = lambda k: P_theta_vec(k, k_max, A_s=1.0)
     Omega = np.zeros(len(k_values))
     for idx, k in enumerate(k_values):
@@ -83,7 +85,7 @@ def _compute_row(args):
 
 
 
-def compute_integral_grid_eMD(k_values, k_max_values, eta_R_values, 
+def compute_integral_grid_eMD(k_values, k_max_values, x_R_values, 
                                max_workers=8, checkpoint_file='grid_checkpoint.pkl'):
     
     # Carica checkpoint se esiste
@@ -95,23 +97,18 @@ def compute_integral_grid_eMD(k_values, k_max_values, eta_R_values,
         done_pairs    = data['done']
         print(f"Già completati: {len(done_pairs)} punti")
     else:
-        integral_grid = np.full((len(k_max_values), len(eta_R_values), len(k_values)), np.nan)
+        integral_grid = np.zeros((len(k_max_values), len(x_R_values), len(k_values)))
         done_pairs    = set()
 
     tasks = []
-    skips_count = 0
     for i, k_max in enumerate(k_max_values):
-        for j, eta_R in enumerate(eta_R_values):
-            if eta_R * k_max > 450 or eta_R * k_max < 50:
-                skips_count += 1
-                continue
+        for j, x_R in enumerate(x_R_values):
             if (i, j) in done_pairs:   # già calcolato
                 continue
-            tasks.append((i, j, k_max, eta_R, k_values))
+            tasks.append((i, j, k_max, x_R, k_values))
 
-    print(f"Punti da calcolare: {len(tasks)}, skippati: {skips_count}")
 
-    CHECKPOINT_EVERY = 500   # salva ogni N punti completati
+    CHECKPOINT_EVERY = 250   # salva ogni N punti completati
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(_compute_row, t): t for t in tasks}
@@ -134,11 +131,11 @@ def compute_integral_grid_eMD(k_values, k_max_values, eta_R_values,
 
 
 
-
+"""
 def save_grid_eMD(filename, k_max_values, eta_R_values, Omega_grid):
     data = {
         'k_max_values': k_max_values,
-        'eta_R_values': eta_R_values,        # eta_R values
+        'eta_R_values': eta_R_values,      
         'Omega_grid': Omega_grid
     }
     with open(filename, 'wb') as f:
@@ -148,24 +145,70 @@ def save_grid_eMD(filename, k_max_values, eta_R_values, Omega_grid):
 def load_grid_eMD(filename):
     with open(filename, 'rb') as f:
         data = pickle.load(f)
-    return (data['k_max_values'], data['eta_R_values']), data['Omega_grid']
+    Omega_grid = data['Omega_grid']    
+    Omega_grid = np.nan_to_num(Omega_grid, nan=0.0)
+
+    return (data['k_max_values'], data['eta_R_values']), Omega_grid
 
 
 def create_interpolator_eMD(filename):
     grid_data, Omega_grid = load_grid_eMD(filename)
-    interpolator = RegularGridInterpolator(grid_data, Omega_grid, method='linear', bounds_error=False,   # no crash fuori bounds
-        fill_value=0.0)
+    interpolator = RegularGridInterpolator(grid_data, Omega_grid, method='linear', bounds_error=True)
     return interpolator
 
 
 class ScaledInterpolatorEMD:
-    """
-    Interpolatore per Omega_GW in scenario eMD.
-    La griglia è in (k_max, x) con x = eta_R * k_max.
-    """
+   
     def __init__(self, filename):
         self.interpolator = create_interpolator_eMD(filename)
 
-    def __call__(self, k_max, eta_R, A_s):                            
+    def __call__(self, k_max, eta_R, A_s):    
         Omega_scaled = self.interpolator((k_max, eta_R)) * (A_s ** 2)
         return Omega_scaled
+    
+"""
+
+
+def save_grid_eMD(filename, k_max_values, x_R_values, Omega_grid):
+    data = {
+        'k_max_values': k_max_values,
+        'x_R_values': x_R_values,      
+        'Omega_grid': Omega_grid
+    }
+    with open(filename, 'wb') as f:
+        pickle.dump(data, f)
+
+
+def load_grid_eMD(filename):
+    with open(filename, 'rb') as f:
+        data = pickle.load(f)
+    Omega_grid = data['Omega_grid']    
+    Omega_grid = np.nan_to_num(Omega_grid, nan=0.0)
+
+    return (data['k_max_values'], data['x_R_values']), Omega_grid
+
+
+def create_interpolator_eMD(filename):
+    grid_data, Omega_grid = load_grid_eMD(filename)
+    log_Omega = np.log(np.maximum(Omega_grid, 1e-100))
+
+    interpolator = RegularGridInterpolator(grid_data, log_Omega, method='linear', bounds_error=False,
+        fill_value=np.log(1e-100))
+    return interpolator
+
+
+class ScaledInterpolatorEMD:
+
+
+    def __init__(self, filename):
+        self.interpolator = create_interpolator_eMD(filename)
+
+    def __call__(self, k_max, x_R, A_s):
+       
+        log_Omega = self.interpolator((k_max, x_R))
+        Omega     = np.exp(log_Omega)        
+        Omega[Omega <= 1e-99] = 0.0
+        
+        Omega_scaled = Omega * (A_s ** 2)
+        return Omega_scaled # restituisci solo i primi 101 valori (fino a ~11.5 Hz)
+  
