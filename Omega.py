@@ -304,7 +304,7 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     """
     
 
-    eps=1e-10
+    eps=1e-14
     s= np.linspace(0, 1-eps, N_s)
     t_sing=np.sqrt(3)-1
     t_max=2*k_max/k -1
@@ -315,18 +315,19 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     
 
     else:
-        width=0.05
+        width=1e-12
         t1= np.linspace(1e-4, t_sing - width, N_t_1)
-        t2= np.linspace(t_sing - width, t_sing + width, N_t_2)
+        #t2= np.linspace(t_sing - width, t_sing + width, N_t_2)
         t3= np.linspace(t_sing + width, t_max+1e-4, N_t_3)
-        t= np.unique(np.concatenate([t1,t2,t3]))
+        #t= np.unique(np.concatenate([t1,t2,t3]))
+        t=np.unique(np.concatenate([t1,t3]))
     
     # constructing the integrand as in "integrand_eMD_resonant" function, using the mask to restrict the integration domain
     S = s[:, None]
     T = t[None, :]
     mask= (T<= -S + 2*k_max/k -1) & ( (1 + T - S) >0) 
     if not np.any(mask):
-        return 0.0, 0.0
+       return 0.0, 0.0
     
     
     
@@ -349,7 +350,7 @@ def compute_Omega_eMD_resonant_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N
     # Se k > k_thr calcola l'erfc. A k = k_thr, erfc(0) = 1.0 -> Si attacca perfettamente.
     damping = np.where(k <= k_thr, 1.0, erfc((k - k_thr) / delta_k))
     
-    return result * damping, 0.0
+    return result*damping, 0.0
     
 
 def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N_t=300):
@@ -397,7 +398,7 @@ def compute_Omega_eMD_large_v_fast(k, eta_R, k_max, P_func, t_max=100, N_s=100,N
    
     damping = np.where(k <= k_thr, 1.0, erfc((k - k_thr) / delta_k))
     
-    return result * damping, 0.0
+    return result , 0.0
 
 
 def compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N_s_1=100,N_t=300, N_s_2=100, N_t_1=500, N_t_2=500, N_t_3=700):
