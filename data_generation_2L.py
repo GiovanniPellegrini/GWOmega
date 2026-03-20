@@ -3,6 +3,7 @@ from utils_2L import gamma_2L, N_auto_interp, S0
 import h5py
 from Omega import P_k_lognormal, compute_Omega_RD_today_fast, compute_Omega_eMD_today_fast, P_theta_vec
 import constants
+from interpolation import ScaledInterpolatorEMD
 import tqdm as tqdm
 
 
@@ -30,12 +31,12 @@ def signal_2L(f, Omega_gw, T_seg, N_seg, shift_angle, filename=None):
 
     h_re =  np.zeros((N_seg, 2, len(f)))
     h_im =  np.zeros((N_seg, 2, len(f)))
-    for i in tqdm.tqdm(range(len(f)), desc="Generating signal data", unit="frequency bin"):
+    for i in range(len(f)):
         h_re[:,:,i]=rng.multivariate_normal(np.zeros(2), 0.5*gamma_matrix[:,:,i], N_seg, method='cholesky')*h[i]    
         h_im[:,:,i]=rng.multivariate_normal(np.zeros(2), 0.5*gamma_matrix[:,:,i], N_seg, method='cholesky')*h[i]
     
     signal = h_re + 1j * h_im
-    print("Signal data generated")
+    #print("Signal data generated")
     if filename is not None:
         with h5py.File(filename, "w") as hf:
             hf.create_dataset("signal", data=signal, compression="gzip")
@@ -63,7 +64,7 @@ def noise_2L(f, N_auto, T_seg, N_seg, filename=None):
     n_re = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n
     n_im = np.random.normal(0, 1/(np.sqrt(2)), (N_seg, 2, len(f))) * n
     noise = n_re + 1j * n_im
-    print("Noise data generated")
+    #print("Noise data generated")
     if filename is not None:
         with h5py.File(filename, "w") as hf:
             hf.create_dataset("noise", data=noise, compression="gzip")
@@ -163,12 +164,13 @@ def create_C_hat_2L_RD(A_s, k_peak, sigma, T_obs, N_seg, shift_angle=0, C_hat_fi
     Omega_gw = [
     compute_Omega_RD_today_fast(float(k), constants.cs_value, P_func)    for k in k_values
     ]
+    
     gamma= gamma_2L(f_values, shift_angle)
     N_func= N_auto_interp("data/ET_15km_ASD.txt")
     N_auto=N_func(f_values)
     S_0= S0(f_values)
 
-    mean= gamma_2L(f_values, shift_angle)*Omega_gw
+    mean= gamma*Omega_gw
     var= (mean**2 + (N_auto/S_0 + Omega_gw)**2)/(2*N_seg)
     C_hat=rng.normal(mean, np.sqrt(var))
 
@@ -204,13 +206,18 @@ def create_C_hat_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0, C_hat_fi
     P_func= lambda k: P_theta_vec(k, k_max, A_s)
     Omega_gw = [
     compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func)    for k in k_values
-    ]
+    ]    
+    
+    #interpolator=ScaledInterpolatorEMD("omega_grid_eMD_v8.pkl")
+    #x_R=k_max*eta_R
+    #Omega_gw=interpolator(k_max, x_R, A_s)
+   
     gamma= gamma_2L(f_values, shift_angle)
     N_func= N_auto_interp("data/ET_15km_ASD.txt")
     N_auto=N_func(f_values)
     S_0= S0(f_values)
 
-    mean= gamma_2L(f_values, shift_angle)*Omega_gw
+    mean= gamma*Omega_gw
     var= (mean**2 + (N_auto/S_0 + Omega_gw)**2)/(2*N_seg)
     C_hat=rng.normal(mean, np.sqrt(var))
 

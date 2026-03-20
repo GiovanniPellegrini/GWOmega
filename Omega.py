@@ -409,7 +409,7 @@ def compute_Omega_eMD_total_fast(k, eta_R, k_max, P_func, Y=2.3, t_max=100, N_s_
     total_error= 0.0
     return total_omega, total_error
 
-def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func,t_max=100, N_s_1=50,N_t=50, N_s_2=300, N_t_1=500, N_t_2=0, N_t_3=500):
+def compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func,t_max=100, N_s_1=100,N_t=300, N_s_2=300, N_t_1=500, N_t_2=500, N_t_3=700):
     """ Compute Omega_GW today during radiation domination phase after eMD with sudden reheating using fast method.
     new parameters:
     Omega_r0_hh : Radiation density parameter today times h^2

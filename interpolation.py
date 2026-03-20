@@ -77,32 +77,49 @@ def _compute_row(args):
     P_func = lambda k: P_theta_vec(k, k_max, A_s=1.0)
     Omega = np.zeros(len(k_values))
     for idx, k in enumerate(k_values):
-        Omega[idx] = compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func)
+        Omega[idx] = compute_Omega_eMD_today_fast(k, eta_R, k_max, P_func,N_s_1=30, N_s_2=500, N_t_1=300, N_t_3=100, N_t_2=0)
 
     return i, j, Omega
 
 
 
 def compute_integral_grid_eMD(k_values, k_max_values, x_R_values, 
-                               max_workers=8):
-    
-    
-    integral_grid = np.zeros((len(k_max_values), len(x_R_values), len(k_values)))
-    done_pairs    = set()
-
+                               max_workers=8, checkpoint_file='emd_grid_checkpoint.pkl'):
+    if os.path.exists(checkpoint_file):
+        print("Checkpoint trovato, riprendo...")
+        with open(checkpoint_file, 'rb') as f:
+            data = pickle.load(f)
+        integral_grid = data['grid']
+        done_pairs    = data['done']
+        print(f"Già completati: {len(done_pairs)} punti")
+    else:
+        integral_grid = np.zeros((len(k_max_values), len(x_R_values), len(k_values)))
+        done_pairs    = set()
     tasks = []
     for i, k_max in enumerate(k_max_values):
         for j, x_R in enumerate(x_R_values):
+            if (i, j) in done_pairs:
+                continue  # Salta se già fatto
             tasks.append((i, j, k_max, x_R, k_values))
 
+    CHECKPOINT_EVERY = 250
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(_compute_row, t): t for t in tasks}
         with tqdm(total=len(tasks), desc="Computing Omega grid eMD") as pbar:
-            for count, future in enumerate(as_completed(futures)):
+            for  count, future in enumerate(as_completed(futures)):
                 i, j, Omega = future.result()
                 integral_grid[i, j, :] = Omega
+                done_pairs.add((i, j))
                 pbar.update(1)
+
+                if count % CHECKPOINT_EVERY == 0:
+                    with open(checkpoint_file, 'wb') as f:
+                        pickle.dump({'grid': integral_grid, 'done': done_pairs}, f)
+
+    # Salva finale e rimuovi checkpoint
+    os.remove(checkpoint_file)
+    print("Max Omega:", np.nanmax(integral_grid))
 
     return integral_grid
 
@@ -187,5 +204,5 @@ class ScaledInterpolatorEMD:
         Omega[Omega <= 1e-99] = 0.0
         
         Omega_scaled = Omega * (A_s ** 2)
-        return Omega_scaled # restituisci solo i primi 101 valori (fino a ~11.5 Hz)
+        return Omega_scaled # restituisci solo i primi 106 valori (fino a ~11.5 Hz)
   

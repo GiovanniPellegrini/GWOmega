@@ -96,8 +96,8 @@ def run_pe_2L_RD(A_s, k_peak, sigma, T_obs, N_seg, C_hat_filename, parameters_fi
     #SNR valuation    
     det_list = ['ET L1', 'ET L2']
     def compute_Omega_RD_today_fast_f(f_values):
-        P_func = lambda kk: P_k_lognormal(kk, k_peak, sigma, A_s)
-        Omega =[compute_Omega_RD_today_fast(k, constants.cs_value, P_func, t_max=100, N_s=10, N_t_1=50, N_t_2=100, N_t_3=700) for k in f_values*2*np.pi]
+        interpolated_Omega = self.interpolator(k_peak, sigma, A_s)
+        Omega =[interpolated_Omega[i] for i in range(len(f_values))]
         return Omega
     T_obs_years= T_obs / (3600*24*365)
     SNR=snr.SNR(T_obs_years, f_values, None, det_list, pol='t', psi=0, gw_spectrum_func=compute_Omega_RD_today_fast_f)
@@ -114,12 +114,12 @@ def run_pe_2L_RD(A_s, k_peak, sigma, T_obs, N_seg, C_hat_filename, parameters_fi
 
     N_func= N_auto_interp("data/ET_15km_ASD.txt")
     N_auto=N_func(f_values)
-
+    
     # Run parameter estimation
     likelihood=SigwEstimatorLikelihood_RD(C_hat,f_values, T_seg,T_obs, N_auto, shift_angle)
     priors = PriorDict()
     priors['A_s']       = LogUniform(1e-4, 5*10**(-2), '$A_s$') 
-    priors['sigma']     = Uniform(1e-2, 1, '$\sigma$') 
+    priors['sigma']     = LogUniform(1e-2, 1, '$\sigma$') 
     priors['k_peak']    = Uniform(1*(2*np.pi), 300*(2*np.pi), '$k_{peak}$') 
 
     true_parameters = {'A_s': A_s, 'sigma': sigma, 'k_peak': k_peak}
@@ -130,7 +130,7 @@ def run_pe_2L_RD(A_s, k_peak, sigma, T_obs, N_seg, C_hat_filename, parameters_fi
         sampler='dynesty',
         nlive=2000,
         n_pool=7,
-        outdir=outdir,
+        outdir=outdir,  
         label=label,
         injection_parameters=true_parameters,
         check_point_plot=False,
@@ -281,7 +281,8 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
         self.gamma= gamma_2L(self.f, shift_angle)
         self.N_auto = N_auto
         self.S0= S0(self.f)
-        self.interpolator= ScaledInterpolatorEMD('omega_grid_eMD.pkl')
+        self.interpolator= ScaledInterpolatorEMD('omega_grid_eMD_v8.pkl')
+        print("Using interpolator from file: omega_grid_eMD_v8.pkl")
         super().__init__(parameters={"A_s": None,  "k_max": None, "x_R": None})
         """
         Initial parameters
@@ -291,19 +292,20 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
             Width of the log-normal primordial power spectrum.
         k_peak : float
             Peak wavenumber of the primordial power spectrum.
-        eta_R : float
-            Conformal time at the end of eMD.
+        x_R : float
+            Comoving distance at the end of eMD.
         """
 
     def log_likelihood(self):
         A_s= self.parameters["A_s"]
         k_max= self.parameters["k_max"]
         x_R= self.parameters["x_R"]
-        eta_R = x_R / k_max
 
-        Omega_gw = self.interpolator(k_max, eta_R, A_s)
+        Omega_gw = self.interpolator(k_max, x_R, A_s)
         Omega_gw = np.array(Omega_gw)
         C_bar=Omega_gw * self.gamma
+        
+        
         sigma_bar=(C_bar**2 + (self.N_auto/self.S0+Omega_gw)**2)/(2*self.N_seg)
         logL=-0.5*np.sum((self.C_hat - C_bar)**2/sigma_bar + np.log(2*np.pi*sigma_bar))
         return logL
@@ -311,6 +313,7 @@ class SigwEstimatorLikelihood_eMD(bilby.Likelihood):
 def run_pe_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0,outdir='output_pe_2L_eMD', C_hat_filename='data/2L/C_hat_2L_eMD_10D.h5', parameters_filename='data/2L/parameters_2L_eMD_10D.txt'):
     T_seg= T_obs / N_seg
     df= 1 / T_seg
+    
     f_values= np.arange(1, 200+df, df)
     parameters= {
         "A_s": A_s,
@@ -328,14 +331,7 @@ def run_pe_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0,outdir='output_
     print("total observation time (s):", T_obs)
 
     #SNR valuation    
-    det_list = ['ET L1', 'ET L2']
-    def compute_Omega_eMD_today_fast_f(f_values):
-        P_func = lambda kk: P_theta_vec(kk, k_max, A_s)
-        Omega =[compute_Omega_eMD_today_fast(k, eta_R,k_max, P_func) for k in f_values*2*np.pi]
-        return Omega
-    T_obs_years= T_obs / (3600*24*365)
-    SNR=snr.SNR(T_obs_years, f_values, None, det_list, pol='t', psi=0, gw_spectrum_func=compute_Omega_eMD_today_fast_f)
-    print(f"SNR ET eMD: {SNR:.2f}")
+    
     
     # Load C_hat and check parameters
     try: 
@@ -348,31 +344,46 @@ def run_pe_2L_eMD(A_s, k_max, eta_R, T_obs, N_seg, shift_angle=0,outdir='output_
 
     N_func= N_auto_interp("data/ET_15km_ASD.txt")
     N_auto=N_func(f_values)
-
     
 
-
+    
     # Run parameter estimation
-    likelihood=SigwEstimatorLikelihood_eMD(C_hat,f_values, T_seg,T_obs, N_auto, shift_angle)
-    priors = PriorDict()
-    priors['A_s']     = LogUniform(1e-10, 1e-8, '$A_{\\text{s}}$')
-    priors['k_max']   = Uniform((2*np.pi), 300*(2*np.pi), '$k_{\\text{max}}$')
-    priors['x_R']     = Uniform(1e-2, 120, '$x_R = k_{\\text{max}}\\,\\eta_R$')
+    likelihood=SigwEstimatorLikelihood_eMD(C_hat=C_hat, f=f_values, T_seg=T_seg, T_obs=T_obs, N_auto=N_auto, shift_angle=shift_angle)
+    
+    
+    x_R= eta_R * k_max
+    det_list = ['ET L1', 'ET L2']
+    def compute_Omega_eMD_today_fast_f(f_values):
+        interpolation= likelihood.interpolator(k_max, x_R, A_s)
+        Omega =[interpolation[i] for i in range(len(f_values))]
+        return Omega
+    T_obs_years= T_obs / (3600*24*365)
+    SNR=snr.SNR(T_obs_years, f_values, None, det_list, pol='t', psi=0, gw_spectrum_func=compute_Omega_eMD_today_fast_f)
+    print(f"SNR ET eMD: {SNR:.2f}")
+    #priors = PriorDict(conversion_function=constrain)
+    
+    priors=PriorDict()
+    priors['A_s']     = LogUniform(1e-12, 1e-8, '$A_{\\text{s}}$')
+    priors['k_max']   = LogUniform((2*np.pi), 300*(2*np.pi), '$k_{\\text{max}}$')
+    priors['x_R']  = Uniform(50, 450, '$x_{\\text{R}}$')
+    #priors['product_eta_k'] = Constraint(minimum=50, maximum=450, name='product_eta_k')
 
-    x_R_true = k_max * eta_R
-    true_parameters = {'A_s': A_s, 'k_max': k_max, 'x_R': x_R_true}
-    label = "estimator RD"+f'_A{A_s:.4f}_kmax{k_max:.1f}_xR{x_R_true:.1f}_Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
+    true_parameters = {'A_s': A_s, 'k_max': k_max, 'x_R': x_R}
+    label = "estimator RD"+f'_A{A_s:.4f}_kmax{k_max:.1f}_xR{x_R:.1f}__Tobs{T_obs/3600:.1f}hr_Tseg{T_seg:.1f}sec'
     result = bilby.run_sampler(
         likelihood=likelihood,
         priors=priors,
         sampler='dynesty',
-        nlive=2000,
+        sample='rwalk',
+        nlive=3000,
         n_pool=7,
         outdir=outdir,
         label=label,
         injection_parameters=true_parameters,
         check_point_plot=False,
     )
+    
+
     
 
 
